@@ -14,6 +14,7 @@ import { EntityRow } from "../components/EntityRow";
 import { EmptyState } from "../components/EmptyState";
 import { PageSkeleton } from "../components/PageSkeleton";
 import { relativeTime, cn, agentRouteRef, agentUrl } from "../lib/utils";
+import { getTremorDivision } from "../lib/tremor-org";
 import { PageTabBar } from "../components/PageTabBar";
 import { Tabs } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -228,11 +229,16 @@ export function Agents() {
       {effectiveView === "list" && filtered.length > 0 && (
         <div className="border border-border">
           {filtered.map((agent) => {
+            const division = getTremorDivision(agent);
             return (
               <EntityRow
                 key={agent.id}
                 title={agent.name}
-                subtitle={`${roleLabels[agent.role] ?? agent.role}${agent.title ? ` - ${agent.title}` : ""}`}
+                subtitle={[
+                  roleLabels[agent.role] ?? agent.role,
+                  agent.title,
+                  division?.shortLabel,
+                ].filter(Boolean).join(" - ")}
                 to={agentUrl(agent)}
                 leading={
                   <span className="relative flex h-2.5 w-2.5">
@@ -322,6 +328,7 @@ function OrgTreeNode({
   liveRunByAgent: Map<string, { runId: string; liveCount: number }>;
 }) {
   const agent = agentMap.get(node.id);
+  const division = agent ? getTremorDivision(agent) : null;
 
   const statusColor = agentStatusDot[node.status] ?? agentStatusDotDefault;
 
@@ -335,10 +342,23 @@ function OrgTreeNode({
           <span className={`absolute inline-flex h-full w-full rounded-full ${statusColor}`} />
         </span>
         <div className="flex-1 min-w-0">
-          <span className="text-sm font-medium">{node.name}</span>
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="truncate text-sm font-medium">{node.name}</span>
+            {division ? (
+              <span
+                className={cn(
+                  "hidden rounded-full border px-2 py-0.5 text-[10px] font-medium md:inline-flex",
+                  division.toneClassName,
+                )}
+              >
+                {division.shortLabel}
+              </span>
+            ) : null}
+          </div>
           <span className="text-xs text-muted-foreground ml-2">
             {roleLabels[node.role] ?? node.role}
             {agent?.title ? ` - ${agent.title}` : ""}
+            {division ? ` - ${division.shortLabel}` : ""}
           </span>
         </div>
         <div className="flex items-center gap-3 shrink-0">

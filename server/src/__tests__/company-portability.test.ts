@@ -22,6 +22,7 @@ const accessSvc = {
   ensureMembership: vi.fn(),
   listActiveUserMemberships: vi.fn(),
   copyActiveUserMemberships: vi.fn(),
+  listPrincipalGrants: vi.fn(),
   setPrincipalPermission: vi.fn(),
 };
 
@@ -116,7 +117,7 @@ describe("company portability", () => {
   const companyPlaybookKey = "company/company-1/company-playbook";
 
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
     companySvc.getById.mockResolvedValue({
       id: "company-1",
       name: "Paperclip",
@@ -340,6 +341,7 @@ describe("company portability", () => {
     assetSvc.getById.mockResolvedValue(null);
     assetSvc.create.mockReset();
     accessSvc.setPrincipalPermission.mockResolvedValue(undefined);
+    accessSvc.listPrincipalGrants.mockResolvedValue([]);
     assetSvc.create.mockResolvedValue({
       id: "asset-created",
     });
@@ -415,6 +417,14 @@ describe("company portability", () => {
     expect(asTextFile(exported.files["agents/claudecoder/AGENTS.md"])).toContain("skills:");
     expect(asTextFile(exported.files["agents/claudecoder/AGENTS.md"])).toContain(`- "${paperclipKey}"`);
     expect(asTextFile(exported.files["agents/cmo/AGENTS.md"])).not.toContain("skills:");
+    const agentSidecar = asTextFile(exported.files["agents/claudecoder/.paperclip.yaml"]);
+    expect(agentSidecar).toContain('schema: "paperclip/v1"');
+    expect(agentSidecar).toContain("inputs:");
+    expect(agentSidecar).toContain("ANTHROPIC_API_KEY:");
+    expect(agentSidecar).not.toContain("promptTemplate");
+    expect(agentSidecar).not.toContain("instructionsFilePath");
+    expect(agentSidecar).not.toContain("secretId");
+    expect(agentSidecar).not.toContain("paperclipSkillSync");
     expect(asTextFile(exported.files["skills/paperclipai/paperclip/paperclip/SKILL.md"])).toContain("metadata:");
     expect(asTextFile(exported.files["skills/paperclipai/paperclip/paperclip/SKILL.md"])).toContain('kind: "github-dir"');
     expect(exported.files["skills/paperclipai/paperclip/paperclip/references/api.md"]).toBeUndefined();
@@ -428,16 +438,172 @@ describe("company portability", () => {
     expect(extension).not.toContain("command:");
     expect(extension).not.toContain("secretId");
     expect(extension).not.toContain('type: "secret_ref"');
-    expect(extension).toContain("inputs:");
-    expect(extension).toContain("ANTHROPIC_API_KEY:");
-    expect(extension).toContain('requirement: "optional"');
-    expect(extension).toContain('default: ""');
     expect(extension).not.toContain("paperclipSkillSync");
     expect(extension).not.toContain("PATH:");
     expect(extension).not.toContain("requireBoardApprovalForNewAgents: true");
     expect(extension).not.toContain("budgetMonthlyCents: 0");
     expect(exported.warnings).toContain("Agent claudecoder command /Users/dotta/.local/bin/claude was omitted from export because it is system-dependent.");
     expect(exported.warnings).toContain("Agent claudecoder PATH override was omitted from export because it is system-dependent.");
+  });
+
+  it("round-trips process agent sidecars with capabilities, command args, and disabled heartbeat", async () => {
+    const portability = companyPortabilityService({} as any);
+
+    agentSvc.list.mockResolvedValue([
+      {
+        id: "agent-1",
+        companyId: "company-1",
+        name: "Tremor Builder",
+        status: "idle",
+        role: "engineer",
+        title: "Platform and DevSecOps Engineer",
+        icon: "code",
+        reportsTo: null,
+        capabilities: "Owns Tremor builds and release safety.",
+        adapterType: "process",
+        adapterConfig: {
+          command: "claude",
+          args: ["--print", "-", "--output-format", "stream-json", "--verbose"],
+        },
+        runtimeConfig: {
+          heartbeat: {
+            enabled: false,
+            intervalSec: 300,
+            wakeOnAssignment: true,
+            wakeOnOnDemand: true,
+            wakeOnAutomation: true,
+            cooldownSec: 10,
+          },
+        },
+        budgetMonthlyCents: 0,
+        permissions: {
+          canCreateAgents: true,
+        },
+        metadata: null,
+      },
+    ]);
+    agentInstructionsSvc.exportFiles.mockImplementation(async (agent: { name: string }) => ({
+      files: {
+        "AGENTS.md": `You are ${agent.name}.`,
+      },
+      entryFile: "AGENTS.md",
+      warnings: [],
+    }));
+
+    const exported = await portability.exportBundle("company-1", {
+      include: {
+        company: true,
+        agents: true,
+        projects: false,
+        issues: false,
+      },
+    });
+
+    const exportedAgentsMarkdown = asTextFile(exported.files["agents/tremor-builder/AGENTS.md"]);
+    const exportedSidecar = asTextFile(exported.files["agents/tremor-builder/.paperclip.yaml"]);
+    expect(exportedAgentsMarkdown).toContain("capabilities:");
+    expect(exportedAgentsMarkdown).toContain("Owns Tremor builds and release safety.");
+    expect(exportedAgentsMarkdown).toContain("You are Tremor Builder.");
+    expect(exportedSidecar).toContain('type: "process"');
+    expect(exportedSidecar).toContain('command: "claude"');
+    expect(exportedSidecar).toContain('args:');
+    expect(exportedSidecar).toContain('intervalSec: 300');
+    expect(exportedSidecar).toContain('canCreateAgents: true');
+    expect(exportedSidecar).not.toContain("cwd:");
+
+    const preview = await portability.previewImport({
+      source: {
+        type: "inline",
+        rootPath: exported.rootPath,
+        files: exported.files,
+      },
+      include: {
+        company: true,
+        agents: true,
+        projects: false,
+        issues: false,
+      },
+      target: {
+        mode: "new_company",
+        newCompanyName: "Imported Tremor",
+      },
+      agents: "all",
+      collisionStrategy: "rename",
+    });
+
+    expect(preview.errors).toEqual([]);
+    expect(preview.warnings).toEqual([]);
+    expect(preview.envInputs).toEqual([]);
+    expect(preview.manifest.agents).toEqual([
+      expect.objectContaining({
+        slug: "tremor-builder",
+        name: "Tremor Builder",
+        capabilities: "Owns Tremor builds and release safety.",
+        adapterType: "process",
+        adapterConfig: expect.objectContaining({
+          command: "claude",
+          args: ["--print", "-", "--output-format", "stream-json", "--verbose"],
+        }),
+        runtimeConfig: expect.objectContaining({
+          heartbeat: expect.objectContaining({
+            intervalSec: 300,
+          }),
+        }),
+        permissions: expect.objectContaining({
+          canCreateAgents: true,
+        }),
+      }),
+    ]);
+
+    companySvc.create.mockResolvedValue({
+      id: "company-imported",
+      name: "Imported Tremor",
+    });
+    agentSvc.create.mockImplementation(async (_companyId: string, input: Record<string, unknown>) => ({
+      id: "agent-created",
+      ...input,
+    }));
+    agentSvc.update.mockImplementation(async (id: string, input: Record<string, unknown>) => ({
+      id,
+      ...input,
+    }));
+
+    await portability.importBundle({
+      source: {
+        type: "inline",
+        rootPath: exported.rootPath,
+        files: exported.files,
+      },
+      include: {
+        company: true,
+        agents: true,
+        projects: false,
+        issues: false,
+      },
+      target: {
+        mode: "new_company",
+        newCompanyName: "Imported Tremor",
+      },
+      agents: "all",
+      collisionStrategy: "rename",
+    }, "user-1");
+
+    expect(agentSvc.create).toHaveBeenCalledWith("company-imported", expect.objectContaining({
+      name: "Tremor Builder",
+      adapterType: "process",
+      adapterConfig: expect.objectContaining({
+        command: "claude",
+        args: ["--print", "-", "--output-format", "stream-json", "--verbose"],
+      }),
+      runtimeConfig: expect.objectContaining({
+        heartbeat: expect.objectContaining({
+          enabled: false,
+        }),
+      }),
+      permissions: expect.objectContaining({
+        canCreateAgents: true,
+      }),
+    }));
   });
 
   it("exports default sidebar order into the Paperclip extension and manifest", async () => {

@@ -91,6 +91,7 @@ import {
 } from "@paperclipai/shared";
 import { redactHomePathUserSegments, redactHomePathUserSegmentsInValue } from "@paperclipai/adapter-utils";
 import { agentRouteRef } from "../lib/utils";
+import { getTremorDivision, readAgentRunPolicy, readProcessArgs, readProcessCommand } from "../lib/tremor-org";
 import {
   applyAgentSkillSnapshot,
   arraysEqual,
@@ -802,6 +803,7 @@ export function AgentDetail() {
   }
   const isPendingApproval = agent.status === "pending_approval";
   const showConfigActionBar = (activeView === "configuration" || activeView === "instructions") && (configDirty || configSaving);
+  const agentDivision = getTremorDivision(agent);
 
   return (
     <div className={cn("space-y-6", isMobile && showConfigActionBar && "pb-24")}>
@@ -818,10 +820,22 @@ export function AgentDetail() {
           </AgentIconPicker>
           <div className="min-w-0">
             <h2 className="text-2xl font-bold truncate">{agent.name}</h2>
-            <p className="text-sm text-muted-foreground truncate">
-              {roleLabels[agent.role] ?? agent.role}
-              {agent.title ? ` - ${agent.title}` : ""}
-            </p>
+            <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+              <p className="truncate">
+                {roleLabels[agent.role] ?? agent.role}
+                {agent.title ? ` - ${agent.title}` : ""}
+              </p>
+              {agentDivision ? (
+                <span
+                  className={cn(
+                    "inline-flex rounded-full border px-2 py-0.5 text-[10px] font-medium",
+                    agentDivision.toneClassName,
+                  )}
+                >
+                  {agentDivision.label}
+                </span>
+              ) : null}
+            </div>
           </div>
         </div>
         <div className="flex items-center gap-1 sm:gap-2 shrink-0">
@@ -1063,6 +1077,70 @@ function SummaryRow({ label, children }: { label: string; children: React.ReactN
   );
 }
 
+function RuntimePill({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="rounded-lg border border-border bg-card/60 px-3 py-2">
+      <div className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</div>
+      <div className="mt-1 text-sm">{value}</div>
+    </div>
+  );
+}
+
+function PortableConfigCard({ agent }: { agent: AgentDetailRecord }) {
+  const division = getTremorDivision(agent);
+  const command = readProcessCommand(agent) ?? "Not configured";
+  const args = readProcessArgs(agent);
+  const runPolicy = readAgentRunPolicy(agent);
+  const canCreateAgents = Boolean(agent.permissions?.canCreateAgents);
+  const canAssignTasks = Boolean(agent.access?.canAssignTasks);
+
+  return (
+    <div className="rounded-lg border border-border p-4 space-y-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-medium">Portable Runtime Mapping</h3>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Identity and instructions live in <code>AGENTS.md</code>. Runtime adapter settings, run policy, and permissions map to the adjacent <code>.paperclip.yaml</code> sidecar during company portability.
+          </p>
+        </div>
+        {division ? (
+          <span className={cn("inline-flex rounded-full border px-2 py-0.5 text-[10px] font-medium", division.toneClassName)}>
+            {division.shortLabel}
+          </span>
+        ) : null}
+      </div>
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <RuntimePill label="Identity source" value={<code>AGENTS.md</code>} />
+        <RuntimePill label="Runtime source" value={<code>.paperclip.yaml</code>} />
+        <RuntimePill label="Adapter" value={<span className="font-mono">{agent.adapterType}</span>} />
+        <RuntimePill label="Run policy" value={runPolicy.summary} />
+      </div>
+      <div className="grid gap-3 md:grid-cols-2">
+        <div className="rounded-lg border border-border bg-card/60 px-3 py-2">
+          <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Command</div>
+          <div className="mt-1 flex items-start justify-between gap-3">
+            <code className="min-w-0 break-all text-xs">{command}</code>
+            <CopyText text={command} className="text-xs text-muted-foreground hover:text-foreground">
+              Copy
+            </CopyText>
+          </div>
+        </div>
+        <div className="rounded-lg border border-border bg-card/60 px-3 py-2">
+          <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Args</div>
+          <div className="mt-1 text-xs text-muted-foreground">
+            {args.length > 0 ? args.map((arg) => <code key={arg} className="mr-1 inline-block break-all">{arg}</code>) : "No args configured"}
+          </div>
+        </div>
+      </div>
+      <div className="grid gap-3 md:grid-cols-3">
+        <RuntimePill label="Can create agents" value={canCreateAgents ? "Enabled" : "Disabled"} />
+        <RuntimePill label="Can assign tasks" value={canAssignTasks ? "Enabled" : "Disabled"} />
+        <RuntimePill label="Task grant source" value={agent.access?.taskAssignSource ?? "none"} />
+      </div>
+    </div>
+  );
+}
+
 function LatestRunCard({ runs, agentId }: { runs: HeartbeatRun[]; agentId: string }) {
   if (runs.length === 0) return null;
 
@@ -1167,8 +1245,53 @@ function AgentOverview({
   agentId: string;
   agentRouteId: string;
 }) {
+  const division = getTremorDivision(agent);
+  const command = readProcessCommand(agent);
+  const args = readProcessArgs(agent);
+  const runPolicy = readAgentRunPolicy(agent);
+  const reportsToName =
+    agent.chainOfCommand.length > 0
+      ? agent.chainOfCommand[agent.chainOfCommand.length - 1]?.name ?? "None"
+      : "None";
+
   return (
     <div className="space-y-8">
+      <div className="rounded-lg border border-border p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-medium">Operating Profile</h3>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Identity, runtime adapter, and permission posture for this agent.
+            </p>
+          </div>
+          {division ? (
+            <span className={cn("inline-flex rounded-full border px-2 py-0.5 text-[10px] font-medium", division.toneClassName)}>
+              {division.label}
+            </span>
+          ) : null}
+        </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <RuntimePill label="Reports to" value={reportsToName} />
+          <RuntimePill label="Capabilities" value={agent.capabilities ?? "Not set"} />
+          <RuntimePill label="Adapter" value={<span className="font-mono">{agent.adapterType}</span>} />
+          <RuntimePill label="Run policy" value={runPolicy.summary} />
+        </div>
+        <div className="mt-3 grid gap-3 md:grid-cols-2">
+          <div className="rounded-lg border border-border bg-card/60 px-3 py-2">
+            <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Command</div>
+            <div className="mt-1 text-xs">
+              <code className="break-all">{command ?? "Not configured"}</code>
+            </div>
+          </div>
+          <div className="rounded-lg border border-border bg-card/60 px-3 py-2">
+            <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Args</div>
+            <div className="mt-1 text-xs text-muted-foreground">
+              {args.length > 0 ? args.map((arg) => <code key={arg} className="mr-1 inline-block break-all">{arg}</code>) : "No args configured"}
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Latest Run */}
       <LatestRunCard runs={runs} agentId={agentRouteId} />
 
@@ -1505,6 +1628,8 @@ function ConfigurationTab({
 
   return (
     <div className="space-y-6">
+      <PortableConfigCard agent={agent} />
+
       <AgentConfigForm
         mode="edit"
         agent={agent}

@@ -243,6 +243,24 @@ describe("agent permission routes", () => {
     expect(res.body.access.taskAssignSource).toBe("explicit_grant");
   });
 
+  it("hides task assignment access when no creator privilege or explicit grant exists", async () => {
+    mockAccessService.listPrincipalGrants.mockResolvedValue([]);
+
+    const app = createApp({
+      type: "board",
+      userId: "board-user",
+      source: "local_implicit",
+      isInstanceAdmin: true,
+      companyIds: [companyId],
+    });
+
+    const res = await request(app).get(`/api/agents/${agentId}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.access.canAssignTasks).toBe(false);
+    expect(res.body.access.taskAssignSource).toBe("none");
+  });
+
   it("keeps task assignment enabled when agent creation privilege is enabled", async () => {
     mockAgentService.updatePermissions.mockResolvedValue({
       ...baseAgent,

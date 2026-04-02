@@ -1,0 +1,23 @@
+role: designer
+adapter:
+  type: process
+  command: claude
+  args:
+    - --print
+    - "-"
+    - --output-format
+    - stream-json
+    - --verbose
+runtime:
+  heartbeat:
+    enabled: false
+    intervalSec: 300
+    wakeOnAssignment: true
+    wakeOnOnDemand: true
+    wakeOnAutomation: true
+    cooldownSec: 10
+  timeoutSec: 900
+  graceSec: 15
+permissions:
+  canCreateAgents: false
+  canAssignTasks: true

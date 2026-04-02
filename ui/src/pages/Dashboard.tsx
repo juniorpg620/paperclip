@@ -6,6 +6,8 @@ import { activityApi } from "../api/activity";
 import { issuesApi } from "../api/issues";
 import { agentsApi } from "../api/agents";
 import { projectsApi } from "../api/projects";
+import { goalsApi } from "../api/goals";
+import { routinesApi } from "../api/routines";
 import { heartbeatsApi } from "../api/heartbeats";
 import { useCompany } from "../context/CompanyContext";
 import { useDialog } from "../context/DialogContext";
@@ -19,12 +21,13 @@ import { ActivityRow } from "../components/ActivityRow";
 import { Identity } from "../components/Identity";
 import { timeAgo } from "../lib/timeAgo";
 import { cn, formatCents } from "../lib/utils";
-import { Bot, CircleDot, DollarSign, ShieldCheck, LayoutDashboard, PauseCircle } from "lucide-react";
+import { Bot, CircleDot, DollarSign, ShieldCheck, LayoutDashboard, PauseCircle, GitBranch, ListTodo, Repeat2 } from "lucide-react";
 import { ActiveAgentsPanel } from "../components/ActiveAgentsPanel";
 import { ChartCard, RunActivityChart, PriorityChart, IssueStatusChart, SuccessRateChart } from "../components/ActivityCharts";
 import { PageSkeleton } from "../components/PageSkeleton";
 import type { Agent, Issue } from "@paperclipai/shared";
 import { PluginSlotOutlet } from "@/plugins/slots";
+import { getTremorDivision, listTremorDivisions } from "../lib/tremor-org";
 
 function getRecentIssues(issues: Issue[]): Issue[] {
   return [...issues]
@@ -71,6 +74,18 @@ export function Dashboard() {
   const { data: projects } = useQuery({
     queryKey: queryKeys.projects.list(selectedCompanyId!),
     queryFn: () => projectsApi.list(selectedCompanyId!),
+    enabled: !!selectedCompanyId,
+  });
+
+  const { data: goals } = useQuery({
+    queryKey: queryKeys.goals.list(selectedCompanyId!),
+    queryFn: () => goalsApi.list(selectedCompanyId!),
+    enabled: !!selectedCompanyId,
+  });
+
+  const { data: routines } = useQuery({
+    queryKey: queryKeys.routines.list(selectedCompanyId!),
+    queryFn: () => routinesApi.list(selectedCompanyId!),
     enabled: !!selectedCompanyId,
   });
 
@@ -162,6 +177,39 @@ export function Dashboard() {
     if (!id || !agents) return null;
     return agents.find((a) => a.id === id)?.name ?? null;
   };
+
+  const workGraph = useMemo(() => {
+    const goalRows = goals ?? [];
+    const routineRows = routines ?? [];
+    return {
+      goals: goalRows.length,
+      goalBranches: goalRows.filter((goal) => goal.level === "team").length,
+      goalMilestones: goalRows.filter((goal) => goal.level === "task").length,
+      projects: projects?.length ?? 0,
+      issues: issues?.length ?? 0,
+      routines: routineRows.length,
+      activeRoutines: routineRows.filter((routine) => routine.status === "active").length,
+    };
+  }, [goals, issues, projects, routines]);
+
+  const divisionCards = useMemo(() => {
+    const divisionMap = new Map(
+      listTremorDivisions().map((division) => [division.key, { division, agents: [] as Agent[] }]),
+    );
+
+    for (const agent of agents ?? []) {
+      const division = getTremorDivision(agent);
+      if (!division) continue;
+      divisionMap.get(division.key)?.agents.push(agent);
+    }
+
+    return Array.from(divisionMap.values()).map(({ division, agents: divisionAgents }) => ({
+      ...division,
+      headcount: divisionAgents.length,
+      activeCount: divisionAgents.filter((agent) => agent.status !== "terminated").length,
+      names: divisionAgents.map((agent) => agent.name).sort((left, right) => left.localeCompare(right)),
+    }));
+  }, [agents]);
 
   if (!selectedCompanyId) {
     if (companies.length === 0) {
@@ -282,6 +330,104 @@ export function Dashboard() {
               }
             />
           </div>
+
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+                  Work Graph
+                </h3>
+                <p className="text-xs text-muted-foreground">
+                  Goals, projects, issues, and routines aligned to the live Tremor roadmap.
+                </p>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 xl:grid-cols-4 gap-1 sm:gap-2">
+              <MetricCard
+                icon={GitBranch}
+                value={workGraph.goals}
+                label="Goals"
+                to="/goals"
+                description={
+                  <span>
+                    {workGraph.goalBranches} branch goals, {workGraph.goalMilestones} milestones
+                  </span>
+                }
+              />
+              <MetricCard
+                icon={LayoutDashboard}
+                value={workGraph.projects}
+                label="Projects"
+                to="/projects"
+                description={
+                  <span>
+                    {projects?.map((project) => project.name).slice(0, 2).join(", ") || "No projects yet"}
+                  </span>
+                }
+              />
+              <MetricCard
+                icon={ListTodo}
+                value={workGraph.issues}
+                label="Issues"
+                to="/issues"
+                description={
+                  <span>
+                    {data.tasks.open} open, {data.tasks.inProgress} in progress, {data.tasks.blocked} blocked
+                  </span>
+                }
+              />
+              <MetricCard
+                icon={Repeat2}
+                value={workGraph.routines}
+                label="Routines"
+                to="/routines"
+                description={
+                  <span>
+                    {workGraph.activeRoutines} active, {Math.max(0, workGraph.routines - workGraph.activeRoutines)} paused
+                  </span>
+                }
+              />
+            </div>
+          </div>
+
+          {divisionCards.some((division) => division.headcount > 0) && (
+            <div className="space-y-3">
+              <div>
+                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+                  Division Map
+                </h3>
+                <p className="text-xs text-muted-foreground">
+                  Tremor is organized into four divisions with clear operating ownership.
+                </p>
+              </div>
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                {divisionCards.map((division) => (
+                  <div key={division.key} className="rounded-lg border border-border bg-card p-4 shadow-sm">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="space-y-1">
+                        <span className={cn("inline-flex rounded-full border px-2 py-0.5 text-[10px] font-medium", division.toneClassName)}>
+                          {division.shortLabel}
+                        </span>
+                        <h4 className="text-sm font-medium">{division.label}</h4>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-lg font-semibold tabular-nums">{division.activeCount}</div>
+                        <div className="text-[11px] text-muted-foreground">active agents</div>
+                      </div>
+                    </div>
+                    <p className="mt-3 text-xs text-muted-foreground">{division.description}</p>
+                    <div className="mt-3 flex items-center justify-between gap-3 text-xs">
+                      <span className="text-muted-foreground">Lead</span>
+                      <span className="font-medium">{division.lead}</span>
+                    </div>
+                    <div className="mt-3 text-xs text-muted-foreground">
+                      {division.names.length > 0 ? division.names.join(", ") : "No agents assigned"}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <ChartCard title="Run Activity" subtitle="Last 14 days">

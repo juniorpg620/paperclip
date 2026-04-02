@@ -1,0 +1,52 @@
+routines:
+  friday-qa-regression-smoke:
+    catchUpPolicy: skip_missed
+    concurrencyPolicy: coalesce_if_active
+    triggers:
+      -
+        cronExpression: "0 11 * * 5"
+        enabled: true
+        kind: schedule
+        label: "Friday QA and regression smoke"
+        timezone: Australia/Sydney
+  monday-strategy-review:
+    catchUpPolicy: skip_missed
+    concurrencyPolicy: coalesce_if_active
+    triggers:
+      -
+        cronExpression: "0 9 * * 1"
+        enabled: true
+        kind: schedule
+        label: "Monday strategy review"
+        timezone: Australia/Sydney
+  thursday-lab-device-health-check:
+    catchUpPolicy: skip_missed
+    concurrencyPolicy: coalesce_if_active
+    triggers:
+      -
+        cronExpression: "30 10 * * 4"
+        enabled: true
+        kind: schedule
+        label: "Thursday lab and device health check"
+        timezone: Australia/Sydney
+  tuesday-roadmap-raid-review:
+    catchUpPolicy: skip_missed
+    concurrencyPolicy: coalesce_if_active
+    triggers:
+      -
+        cronExpression: "30 9 * * 2"
+        enabled: true
+        kind: schedule
+        label: "Tuesday roadmap and RAID review"
+        timezone: Australia/Sydney
+  wednesday-budget-runway-review:
+    catchUpPolicy: skip_missed
+    concurrencyPolicy: coalesce_if_active
+    triggers:
+      -
+        cronExpression: "0 10 * * 3"
+        enabled: true
+        kind: schedule
+        label: "Wednesday budget and runway review"
+        timezone: Australia/Sydney
+schema: paperclip/v1
