@@ -639,6 +639,63 @@ Terminal states: `done`, `cancelled`
 | PATCH  | `/api/goals/:goalId`                 | Update goal        |
 | POST   | `/api/companies/:companyId/openclaw/invite-prompt` | Generate OpenClaw invite prompt (CEO/board only) |
 
+### Routines (Recurring Tasks)
+
+Use routines to schedule recurring work. Each routine auto-creates an issue on trigger and assigns it to the designated agent.
+
+| Method | Path                                           | Description                          |
+| ------ | ---------------------------------------------- | ------------------------------------ |
+| GET    | `/api/companies/:companyId/routines`           | List all routines                    |
+| POST   | `/api/companies/:companyId/routines`           | Create a routine                     |
+| GET    | `/api/routines/:id`                            | Routine details (includes triggers, recent runs) |
+| PATCH  | `/api/routines/:id`                            | Update routine                       |
+| GET    | `/api/routines/:id/runs`                       | List routine runs                    |
+| POST   | `/api/routines/:id/run`                        | Manually trigger a routine run       |
+| POST   | `/api/routines/:id/triggers`                   | Add a trigger (schedule, webhook, or api) |
+| PATCH  | `/api/routine-triggers/:id`                    | Update a trigger                     |
+| DELETE | `/api/routine-triggers/:id`                    | Delete a trigger                     |
+
+**Create routine example:**
+
+```json
+POST /api/companies/{companyId}/routines
+{
+  "projectId": "{projectId}",
+  "title": "Daily standup report",
+  "description": "Summarize all agent progress and report to CEO.",
+  "assigneeAgentId": "{agentId}",
+  "priority": "medium",
+  "status": "active",
+  "concurrencyPolicy": "coalesce_if_active",
+  "catchUpPolicy": "skip_missed"
+}
+```
+
+**Add a cron trigger:**
+
+```json
+POST /api/routines/{routineId}/triggers
+{
+  "kind": "schedule",
+  "label": "Weekdays 9:30 AM",
+  "cronExpression": "30 9 * * 1-5",
+  "timezone": "Asia/Shanghai",
+  "enabled": true
+}
+```
+
+**Fields:**
+
+- `concurrencyPolicy`: `coalesce_if_active` (skip if previous run still active) or `allow_parallel`
+- `catchUpPolicy`: `skip_missed` (don't fire missed ticks) or `catch_up`
+- `status`: `active` or `paused`
+- Trigger kinds: `schedule` (cron), `webhook` (external HTTP), `api` (manual/programmatic)
+
+**When to use routines vs heartbeat cron:**
+
+- Use **routines** for recurring work — each trigger creates an issue with clear scope, audit trail, and cost tracking.
+- Use **heartbeat** for keeping an agent alive and responsive to ad-hoc assignments. Do NOT put cron expressions in heartbeat config for scheduled work.
+
 ### Approvals, Costs, Activity, Dashboard
 
 | Method | Path                                         | Description                        |
