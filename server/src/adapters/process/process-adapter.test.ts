@@ -4,6 +4,7 @@ import { processAdapter } from "./index.js";
 describe("process adapter environment checks", () => {
   it("passes validation when command and args are configured", async () => {
     const result = await processAdapter.testEnvironment({
+      companyId: "tremor",
       adapterType: "process",
       config: {
         command: process.execPath,
@@ -21,6 +22,7 @@ describe("process adapter environment checks", () => {
 
   it("reports a missing command as a validation error", async () => {
     const result = await processAdapter.testEnvironment({
+      companyId: "tremor",
       adapterType: "process",
       config: {
         args: ["--version"],
