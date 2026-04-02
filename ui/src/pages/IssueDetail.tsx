@@ -12,7 +12,7 @@ import { useCompany } from "../context/CompanyContext";
 import { usePanel } from "../context/PanelContext";
 import { useToast } from "../context/ToastContext";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
-import { assigneeValueFromSelection, suggestedCommentAssigneeValue } from "../lib/assignees";
+import { assigneeValueFromSelection, parseAssigneeValue, suggestedCommentAssigneeValue } from "../lib/assignees";
 import { queryKeys } from "../lib/queryKeys";
 import { createIssueDetailPath, readIssueDetailBreadcrumb } from "../lib/issueDetailBreadcrumb";
 import {
@@ -32,6 +32,7 @@ import { IssueDocumentsSection } from "../components/IssueDocumentsSection";
 import { IssueProperties } from "../components/IssueProperties";
 import { IssueWorkspaceCard } from "../components/IssueWorkspaceCard";
 import { LiveRunWidget } from "../components/LiveRunWidget";
+import { ChatMode } from "../components/ChatMode";
 import type { MentionOption } from "../components/MarkdownEditor";
 import { ScrollToBottom } from "../components/ScrollToBottom";
 import { StatusIcon } from "../components/StatusIcon";
@@ -1219,6 +1220,10 @@ export function IssueDetail() {
             <ListTree className="h-3.5 w-3.5" />
             Sub-issues
           </TabsTrigger>
+          <TabsTrigger value="chat" className="gap-1.5">
+            <MessageSquare className="h-3.5 w-3.5" />
+            Chat
+          </TabsTrigger>
           <TabsTrigger value="activity" className="gap-1.5">
             <ActivityIcon className="h-3.5 w-3.5" />
             Activity
@@ -1262,6 +1267,28 @@ export function IssueDetail() {
             }}
             onAttachImage={async (file) => {
               await uploadAttachment.mutateAsync(file);
+            }}
+            liveRunSlot={<LiveRunWidget issueId={issueId!} companyId={issue.companyId} />}
+          />
+        </TabsContent>
+
+        <TabsContent value="chat">
+          <ChatMode
+            comments={timelineComments}
+            linkedRuns={timelineRuns}
+            activeRun={
+              runningIssueRun
+                ? { runId: runningIssueRun.id, status: "running", agentId: runningIssueRun.agentId }
+                : undefined
+            }
+            agentMap={agentMap}
+            onSendMessage={async (body: string) => {
+              if (actualAssigneeValue) {
+                const { assigneeAgentId, assigneeUserId } = parseAssigneeValue(actualAssigneeValue);
+                await addCommentAndReassign.mutateAsync({ body, reopen: false, reassignment: { assigneeAgentId, assigneeUserId } });
+              } else {
+                await addComment.mutateAsync({ body });
+              }
             }}
             liveRunSlot={<LiveRunWidget issueId={issueId!} companyId={issue.companyId} />}
           />
