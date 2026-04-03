@@ -12,6 +12,7 @@ interface InlineEditorProps {
   multiline?: boolean;
   imageUploadHandler?: (file: File) => Promise<string>;
   mentions?: MentionOption[];
+  nullable?: boolean;
 }
 
 /** Shared padding so display and edit modes occupy the exact same box. */
@@ -26,6 +27,7 @@ export function InlineEditor({
   className,
   placeholder = "Click to edit...",
   multiline = false,
+  nullable = false,
   imageUploadHandler,
   mentions,
 }: InlineEditorProps) {
@@ -80,16 +82,36 @@ export function InlineEditor({
   }, [editing, multiline]);
 
   const commit = useCallback(async (nextValue = draft) => {
-    const trimmed = nextValue.trim();
-    if (trimmed && trimmed !== value) {
-      await Promise.resolve(onSave(trimmed));
+    const valueToSave = nextValue.trim();
+    const valueChanged = valueToSave !== value;
+    const shouldSave = nullable
+      ? valueChanged
+      : Boolean(valueToSave && valueChanged);
+    if (shouldSave) {
+      await Promise.resolve(onSave(valueToSave));
     } else {
       setDraft(value);
     }
     if (!multiline) {
       setEditing(false);
     }
-  }, [draft, multiline, onSave, value]);
+  }, [draft, multiline, nullable, onSave, value]);
+
+  /** Multiline blur/submit: show autosave indicator when persisting */
+  const finalizeMultilineBlurOrSubmit = useCallback(() => {
+    const trimmed = draft.trim();
+    if (trimmed === value) {
+      reset();
+      void commit();
+      return;
+    }
+    if (!trimmed && !nullable) {
+      reset();
+      void commit();
+      return;
+    }
+    void runSave(() => commit());
+  }, [commit, draft, nullable, reset, runSave, value]);
 
   function handleKeyDown(e: React.KeyboardEvent) {
     if (e.key === "Enter" && !multiline) {
@@ -117,7 +139,8 @@ export function InlineEditor({
     if (!multiline) return;
     if (!multilineFocused) return;
     const trimmed = draft.trim();
-    if (!trimmed || trimmed === value) {
+    // Nullable: empty draft can still be a real edit (clearing); only skip debounce when unchanged or empty is invalid.
+    if (trimmed === value || (!trimmed && !nullable)) {
       if (autosaveState !== "saved") {
         reset();
       }
@@ -136,7 +159,7 @@ export function InlineEditor({
         clearTimeout(autosaveDebounceRef.current);
       }
     };
-  }, [autosaveState, commit, draft, markDirty, multiline, multilineFocused, reset, runSave, value]);
+  }, [autosaveState, commit, draft, markDirty, multiline, multilineFocused, nullable, reset, runSave, value]);
 
   if (multiline) {
     return (
@@ -153,13 +176,7 @@ export function InlineEditor({
             clearTimeout(autosaveDebounceRef.current);
           }
           setMultilineFocused(false);
-          const trimmed = draft.trim();
-          if (!trimmed || trimmed === value) {
-            reset();
-            void commit();
-            return;
-          }
-          void runSave(() => commit());
+          finalizeMultilineBlurOrSubmit();
         }}
         onKeyDown={handleKeyDown}
       >
@@ -174,13 +191,7 @@ export function InlineEditor({
           imageUploadHandler={imageUploadHandler}
           mentions={mentions}
           onSubmit={() => {
-            const trimmed = draft.trim();
-            if (!trimmed || trimmed === value) {
-              reset();
-              void commit();
-              return;
-            }
-            void runSave(() => commit());
+            finalizeMultilineBlurOrSubmit();
           }}
         />
         <div className="flex min-h-4 items-center justify-end pr-1">
