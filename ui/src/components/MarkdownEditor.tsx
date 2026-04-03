@@ -574,6 +574,7 @@ export const MarkdownEditor = forwardRef<MarkdownEditorRef, MarkdownEditorProps>
         ref={handleEditorRef}
         markdown={value}
         placeholder={placeholder}
+        suppressHtmlProcessing
         onChange={(next) => {
           const externalValue = latestPropValueRef.current;
           if (!isFocusedRef.current) {
