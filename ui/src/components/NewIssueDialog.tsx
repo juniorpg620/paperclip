@@ -448,6 +448,9 @@ export function NewIssueDialog() {
       reset();
       closeNewIssue();
     },
+    onError: (err) => {
+      pushToast({ title: "Failed to create issue", body: err instanceof Error ? err.message : "Something went wrong.", tone: "error" });
+    },
   });
 
   const uploadDescriptionImage = useMutation({
