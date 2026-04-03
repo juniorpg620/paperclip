@@ -45,6 +45,7 @@ import {
   readPaperclipSkillSyncPreference,
   writePaperclipSkillSyncPreference,
 } from "@paperclipai/adapter-utils/server-utils";
+import { asStringArray } from "@paperclipai/adapter-utils/server-utils";
 import { notFound, unprocessable } from "../errors.js";
 import { ghFetch, gitHubApiBase, resolveRawGitHubUrl } from "./github-fetch.js";
 import type { StorageService } from "../storage/types.js";
@@ -546,6 +547,12 @@ function asString(value: unknown): string | null {
   return trimmed.length > 0 ? trimmed : null;
 }
 
+function asPortableStringArray(value: unknown): string[] {
+  return asStringArray(value)
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0);
+}
+
 function asBoolean(value: unknown): boolean | null {
   return typeof value === "boolean" ? value : null;
 }
@@ -658,6 +665,16 @@ function disableImportedTimerHeartbeat(runtimeConfig: unknown) {
   heartbeat.enabled = false;
   next.heartbeat = heartbeat;
   return next;
+}
+
+function shouldGrantImportedTaskAssignPermission(
+  role: string | null | undefined,
+  permissions: unknown,
+) {
+  if (role === "ceo") return true;
+  if (!isPlainRecord(permissions)) return false;
+  if (permissions.canCreateAgents === true) return true;
+  return permissions.canAssignTasks === true;
 }
 
 function normalizePortableProjectWorkspaceExtension(
@@ -1254,6 +1271,28 @@ function readPortableTextFile(
   return typeof value === "string" ? value : null;
 }
 
+function normalizeComparableMarkdown(value: string) {
+  return value.replace(/\r\n/g, "\n").trimEnd();
+}
+
+function stringifySkillInventoryEntry(entry: { path: string; kind: string }) {
+  return `${entry.path}:${entry.kind}`;
+}
+
+function isIdenticalSkillImport(
+  existing: CompanySkill,
+  manifestSkill: CompanyPortabilitySkillManifestEntry,
+  sourceFiles: Record<string, CompanyPortabilityFileEntry>,
+) {
+  const sourceMarkdown = readPortableTextFile(sourceFiles, manifestSkill.path);
+  if (sourceMarkdown === null) return false;
+  if (normalizeComparableMarkdown(existing.markdown) !== normalizeComparableMarkdown(sourceMarkdown)) return false;
+  const existingInventory = existing.fileInventory.map(stringifySkillInventoryEntry).sort();
+  const manifestInventory = manifestSkill.fileInventory.map(stringifySkillInventoryEntry).sort();
+  if (existingInventory.length !== manifestInventory.length) return false;
+  return existingInventory.every((value, index) => value === manifestInventory[index]);
+}
+
 function inferContentTypeFromPath(filePath: string) {
   const extension = path.posix.extname(filePath).toLowerCase();
   switch (extension) {
@@ -1379,6 +1418,28 @@ function normalizePortableSidebarOrder(value: unknown): CompanyPortabilitySideba
   return sidebar.agents.length > 0 || sidebar.projects.length > 0 ? sidebar : null;
 }
 
+function expandSelectedPortableFiles(
+  selectedFiles: Set<string>,
+  files: Record<string, CompanyPortabilityFileEntry>,
+) {
+  const expanded = new Set(selectedFiles);
+  for (const filePath of selectedFiles) {
+    const normalized = normalizePortablePath(filePath);
+    if (!(normalized === "AGENTS.md" || normalized.endsWith("/AGENTS.md"))) continue;
+    const directory = path.posix.dirname(normalized);
+    const candidates = [
+      normalizePortablePath(path.posix.join(directory, ".paperclip.yaml")),
+      normalizePortablePath(path.posix.join(directory, ".paperclip.yml")),
+    ];
+    for (const candidate of candidates) {
+      if (typeof files[candidate] === "string") {
+        expanded.add(candidate);
+      }
+    }
+  }
+  return expanded;
+}
+
 function sortAgentsBySidebarOrder<T extends { id: string; name: string; reportsTo: string | null }>(agents: T[]) {
   if (agents.length === 0) return [];
 
@@ -1466,15 +1527,16 @@ function filterExportFiles(
       .map((entry) => normalizePortablePath(entry))
       .filter((entry) => entry.length > 0),
   );
+  const expandedSelectedFiles = expandSelectedPortableFiles(selectedFiles, files);
   const filtered: Record<string, CompanyPortabilityFileEntry> = {};
   for (const [filePath, content] of Object.entries(files)) {
-    if (!selectedFiles.has(filePath)) continue;
+    if (!expandedSelectedFiles.has(filePath)) continue;
     filtered[filePath] = content;
   }
 
   const extensionEntry = filtered[paperclipExtensionPath];
-  if (selectedFiles.has(paperclipExtensionPath) && typeof extensionEntry === "string") {
-    filtered[paperclipExtensionPath] = filterPortableExtensionYaml(extensionEntry, selectedFiles);
+  if (expandedSelectedFiles.has(paperclipExtensionPath) && typeof extensionEntry === "string") {
+    filtered[paperclipExtensionPath] = filterPortableExtensionYaml(extensionEntry, expandedSelectedFiles);
   }
 
   return filtered;
@@ -1483,7 +1545,70 @@ function filterExportFiles(
 function findPaperclipExtensionPath(files: Record<string, CompanyPortabilityFileEntry>) {
   if (typeof files[".paperclip.yaml"] === "string") return ".paperclip.yaml";
   if (typeof files[".paperclip.yml"] === "string") return ".paperclip.yml";
-  return Object.keys(files).find((entry) => entry.endsWith("/.paperclip.yaml") || entry.endsWith("/.paperclip.yml")) ?? null;
+  return null;
+}
+
+function findPaperclipAgentExtensionPaths(files: Record<string, CompanyPortabilityFileEntry>) {
+  const paths = new Map<string, string>();
+  for (const entry of Object.keys(files)) {
+    const normalized = normalizePortablePath(entry);
+    const match = normalized.match(/^agents\/([^/]+)\/\.paperclip\.ya?ml$/);
+    if (!match) continue;
+    paths.set(match[1]!, normalized);
+  }
+  return paths;
+}
+
+function mergePaperclipAgentExtensions(
+  base: Record<string, unknown>,
+  override: Record<string, unknown>,
+) {
+  const merged: Record<string, unknown> = { ...base, ...override };
+  if (isPlainRecord(base.adapter) || isPlainRecord(override.adapter)) {
+    merged.adapter = {
+      ...(isPlainRecord(base.adapter) ? base.adapter : {}),
+      ...(isPlainRecord(override.adapter) ? override.adapter : {}),
+    };
+  }
+  if (isPlainRecord(base.runtime) || isPlainRecord(override.runtime)) {
+    merged.runtime = {
+      ...(isPlainRecord(base.runtime) ? base.runtime : {}),
+      ...(isPlainRecord(override.runtime) ? override.runtime : {}),
+    };
+  }
+  if (isPlainRecord(base.permissions) || isPlainRecord(override.permissions)) {
+    merged.permissions = {
+      ...(isPlainRecord(base.permissions) ? base.permissions : {}),
+      ...(isPlainRecord(override.permissions) ? override.permissions : {}),
+    };
+  }
+  if (isPlainRecord(base.inputs) || isPlainRecord(override.inputs)) {
+    merged.inputs = {
+      ...(isPlainRecord(base.inputs) ? base.inputs : {}),
+      ...(isPlainRecord(override.inputs) ? override.inputs : {}),
+    };
+  }
+  if (isPlainRecord(base.metadata) || isPlainRecord(override.metadata)) {
+    merged.metadata = {
+      ...(isPlainRecord(base.metadata) ? base.metadata : {}),
+      ...(isPlainRecord(override.metadata) ? override.metadata : {}),
+    };
+  }
+  return merged;
+}
+
+function readPortableAgentAdapterCommand(adapter: Record<string, unknown> | null | undefined) {
+  if (!isPlainRecord(adapter)) return null;
+  const nestedConfig = isPlainRecord(adapter.config) ? adapter.config : null;
+  return asString(adapter.command) ?? asString(nestedConfig?.command);
+}
+
+function readPortableAgentAdapterArgs(adapter: Record<string, unknown> | null | undefined) {
+  if (!isPlainRecord(adapter)) return [];
+  const nestedConfig = isPlainRecord(adapter.config) ? adapter.config : null;
+  const topLevelArgs = asPortableStringArray(adapter.args);
+  if (topLevelArgs.length > 0) return topLevelArgs;
+  return asPortableStringArray(nestedConfig?.args);
 }
 
 function ensureMarkdownPath(pathValue: string) {
@@ -1836,6 +1961,7 @@ function filterCompanyMarkdownIncludes(
 function applySelectedFilesToSource(source: ResolvedSource, selectedFiles?: string[]): ResolvedSource {
   const normalizedSelection = normalizeSelectedFiles(selectedFiles);
   if (!normalizedSelection) return source;
+  const effectiveSelection = expandSelectedPortableFiles(normalizedSelection, source.files);
 
   const companyPath = source.manifest.company
     ? ensureMarkdownPath(source.manifest.company.path)
@@ -1852,21 +1978,21 @@ function applySelectedFilesToSource(source: ResolvedSource, selectedFiles?: stri
   const effectiveFiles: Record<string, CompanyPortabilityFileEntry> = {};
   for (const [filePath, content] of Object.entries(source.files)) {
     const normalizedPath = normalizePortablePath(filePath);
-    if (!normalizedSelection.has(normalizedPath)) continue;
+    if (!effectiveSelection.has(normalizedPath)) continue;
     effectiveFiles[normalizedPath] = content;
   }
 
   effectiveFiles[companyPath] = filterCompanyMarkdownIncludes(
     companyPath,
     companyMarkdown,
-    normalizedSelection,
+    effectiveSelection,
   );
 
   const filtered = buildManifestFromPackageFiles(effectiveFiles, {
     sourceLabel: source.manifest.source,
   });
 
-  if (!normalizedSelection.has(companyPath)) {
+  if (!effectiveSelection.has(companyPath)) {
     filtered.manifest.company = null;
   }
 
@@ -2276,6 +2402,7 @@ function buildManifestFromPackageFiles(
   const paperclipExtension = paperclipExtensionPath
     ? parseYamlFile(readPortableTextFile(normalizedFiles, paperclipExtensionPath) ?? "")
     : {};
+  const paperclipAgentExtensionPaths = findPaperclipAgentExtensionPaths(normalizedFiles);
   const paperclipCompany = isPlainRecord(paperclipExtension.company) ? paperclipExtension.company : {};
   const paperclipSidebar = normalizePortableSidebarOrder(paperclipExtension.sidebar);
   const paperclipAgents = isPlainRecord(paperclipExtension.agents) ? paperclipExtension.agents : {};
@@ -2320,6 +2447,16 @@ function buildManifestFromPackageFiles(
   const projectPaths = Array.from(new Set([...referencedProjectPaths, ...discoveredProjectPaths])).sort();
   const taskPaths = Array.from(new Set([...referencedTaskPaths, ...discoveredTaskPaths])).sort();
   const skillPaths = Array.from(new Set([...referencedSkillPaths, ...discoveredSkillPaths])).sort();
+  const paperclipAgentSidecars = new Map<string, Record<string, unknown>>();
+  for (const [slug, agentExtensionPath] of paperclipAgentExtensionPaths.entries()) {
+    const parsed = parseYamlFile(readPortableTextFile(normalizedFiles, agentExtensionPath) ?? "");
+    const sidecar = isPlainRecord(parsed.agent) ? parsed.agent : parsed;
+    if (isPlainRecord(sidecar)) {
+      const next = { ...sidecar };
+      delete next.schema;
+      paperclipAgentSidecars.set(slug, next);
+    }
+  }
 
   const manifest: CompanyPortabilityManifest = {
     schemaVersion: 5,
@@ -2377,14 +2514,24 @@ function buildManifestFromPackageFiles(
     const frontmatter = agentDoc.frontmatter;
     const fallbackSlug = normalizeAgentUrlKey(path.posix.basename(path.posix.dirname(agentPath))) ?? "agent";
     const slug = asString(frontmatter.slug) ?? fallbackSlug;
-    const extension = isPlainRecord(paperclipAgents[slug]) ? paperclipAgents[slug] : {};
+    const rootExtension = isPlainRecord(paperclipAgents[slug]) ? paperclipAgents[slug] : {};
+    const sidecarExtension = paperclipAgentSidecars.get(slug) ?? {};
+    const extension = mergePaperclipAgentExtensions(rootExtension, sidecarExtension);
     const extensionAdapter = isPlainRecord(extension.adapter) ? extension.adapter : null;
     const extensionRuntime = isPlainRecord(extension.runtime) ? extension.runtime : null;
     const extensionPermissions = isPlainRecord(extension.permissions) ? extension.permissions : null;
     const extensionMetadata = isPlainRecord(extension.metadata) ? extension.metadata : null;
     const adapterConfig = isPlainRecord(extensionAdapter?.config)
-      ? extensionAdapter.config
+      ? { ...extensionAdapter.config }
       : {};
+    const portableAdapterCommand = readPortableAgentAdapterCommand(extensionAdapter);
+    const portableAdapterArgs = readPortableAgentAdapterArgs(extensionAdapter);
+    if (portableAdapterCommand) {
+      adapterConfig.command = portableAdapterCommand;
+    }
+    if (portableAdapterArgs.length > 0) {
+      adapterConfig.args = portableAdapterArgs;
+    }
     const runtimeConfig = extensionRuntime ?? {};
     const title = asString(frontmatter.title);
 
@@ -2396,7 +2543,7 @@ function buildManifestFromPackageFiles(
       role: asString(extension.role) ?? "agent",
       title,
       icon: asString(extension.icon),
-      capabilities: asString(extension.capabilities),
+      capabilities: asString(frontmatter.capabilities) ?? asString(extension.capabilities),
       reportsToSlug: asString(frontmatter.reportsTo) ?? asString(extension.reportsTo),
       adapterType: asString(extensionAdapter?.type) ?? "process",
       adapterConfig,
@@ -2726,7 +2873,9 @@ export function companyPortabilityService(db: Db, storage?: StorageService) {
           relative.endsWith(".md") ||
           relative.startsWith("skills/") ||
           relative === ".paperclip.yaml" ||
-          relative === ".paperclip.yml"
+          relative === ".paperclip.yml" ||
+          relative.endsWith("/.paperclip.yaml") ||
+          relative.endsWith("/.paperclip.yml")
         );
       });
     for (const repoPath of candidatePaths) {
@@ -3039,6 +3188,16 @@ export function companyPortabilityService(db: Db, storage?: StorageService) {
     }
     const selectedSkillRows = Array.from(selectedSkills.values())
       .sort((left, right) => left.key.localeCompare(right.key));
+    const taskAssignGrantByAgentId = new Map<string, boolean>();
+    if (include.agents) {
+      for (const agent of agentRows) {
+        const grants = await access.listPrincipalGrants(companyId, "agent", agent.id);
+        taskAssignGrantByAgentId.set(
+          agent.id,
+          grants.some((grant) => grant.permissionKey === "tasks:assign"),
+        );
+      }
+    }
 
     const skillExportDirs = buildSkillExportDirMap(selectedSkillRows, company.issuePrefix);
     for (const skill of selectedSkillRows) {
@@ -3079,6 +3238,14 @@ export function companyPortabilityService(db: Db, storage?: StorageService) {
             defaultRules: adapterDefaultRules,
           },
         ) as Record<string, unknown>;
+        const portableAdapterCommand = asString(portableAdapterConfig.command);
+        const portableAdapterArgs = asPortableStringArray(portableAdapterConfig.args);
+        if (portableAdapterCommand) {
+          delete portableAdapterConfig.command;
+        }
+        if (portableAdapterArgs.length > 0) {
+          delete portableAdapterConfig.args;
+        }
         const portableRuntimeConfig = pruneDefaultLikeValue(
           normalizePortableConfig(agent.runtimeConfig),
           {
@@ -3086,7 +3253,21 @@ export function companyPortabilityService(db: Db, storage?: StorageService) {
             defaultRules: RUNTIME_DEFAULT_RULES,
           },
         ) as Record<string, unknown>;
-        const portablePermissions = pruneDefaultLikeValue(agent.permissions ?? {}, { dropFalseBooleans: true }) as Record<string, unknown>;
+        const portablePermissionsSource = {
+          ...(isPlainRecord(agent.permissions) ? agent.permissions : {}),
+        } as Record<string, unknown>;
+        const hasExplicitTaskAssignGrant = taskAssignGrantByAgentId.get(agent.id) === true;
+        if (
+          hasExplicitTaskAssignGrant &&
+          agent.role !== "ceo" &&
+          !Boolean(isPlainRecord(agent.permissions) ? agent.permissions.canCreateAgents : false)
+        ) {
+          portablePermissionsSource.canAssignTasks = true;
+        }
+        const portablePermissions = pruneDefaultLikeValue(
+          portablePermissionsSource,
+          { dropFalseBooleans: true },
+        ) as Record<string, unknown>;
         const agentEnvInputs = dedupeEnvInputs(
           envInputs
             .slice(envInputsStart)
@@ -3097,10 +3278,9 @@ export function companyPortabilityService(db: Db, storage?: StorageService) {
           (agent.adapterConfig as Record<string, unknown>) ?? {},
         ).desiredSkills;
 
-        const commandValue = asString(portableAdapterConfig.command);
+        const commandValue = portableAdapterCommand;
         if (commandValue && isAbsoluteCommand(commandValue)) {
           warnings.push(`Agent ${slug} command ${commandValue} was omitted from export because it is system-dependent.`);
-          delete portableAdapterConfig.command;
         }
         for (const [relativePath, content] of Object.entries(exportedInstructions.files)) {
           const targetPath = `agents/${slug}/${relativePath}`;
@@ -3110,6 +3290,7 @@ export function companyPortabilityService(db: Db, storage?: StorageService) {
                 name: agent.name,
                 title: agent.title ?? null,
                 reportsTo: reportsToSlug,
+                capabilities: agent.capabilities ?? null,
                 skills: desiredSkills.length > 0 ? desiredSkills : undefined,
               }) as Record<string, unknown>,
               content,
@@ -3125,6 +3306,8 @@ export function companyPortabilityService(db: Db, storage?: StorageService) {
           capabilities: agent.capabilities ?? null,
           adapter: {
             type: agent.adapterType,
+            command: commandValue && !isAbsoluteCommand(commandValue) ? commandValue : undefined,
+            args: portableAdapterArgs.length > 0 ? portableAdapterArgs : undefined,
             config: portableAdapterConfig,
           },
           runtime: portableRuntimeConfig,
@@ -3137,6 +3320,13 @@ export function companyPortabilityService(db: Db, storage?: StorageService) {
             env: buildEnvInputMap(agentEnvInputs),
           };
         }
+        files[`agents/${slug}/.paperclip.yaml`] = buildYamlFile(
+          {
+            schema: "paperclip/v1",
+            ...(isPlainRecord(extension) ? extension : {}),
+          },
+          { preserveEmptyStrings: true },
+        );
         paperclipAgentsOut[slug] = isPlainRecord(extension) ? extension : {};
       }
     }
@@ -3548,6 +3738,10 @@ export function companyPortabilityService(db: Db, storage?: StorageService) {
       const existingSkillSlugs = new Set(existingSkills.map((skill) => normalizeSkillSlug(skill.slug) ?? skill.slug));
       for (const skill of manifest.skills) {
         const skillSlug = normalizeSkillSlug(skill.slug) ?? skill.slug;
+        const existingSkill = existingSkills.find((entry) => entry.key === skill.key || (normalizeSkillSlug(entry.slug) ?? entry.slug) === skillSlug) ?? null;
+        if (existingSkill && isIdenticalSkillImport(existingSkill, skill, source.files)) {
+          continue;
+        }
         if (existingSkillKeys.has(skill.key) || existingSkillSlugs.has(skillSlug)) {
           if (mode === "agent_safe") {
             warnings.push(`Existing skill "${skill.slug}" matched during safe import and will ${collisionStrategy === "skip" ? "be skipped" : "be renamed"} instead of overwritten.`);
@@ -3928,7 +4122,11 @@ export function companyPortabilityService(db: Db, storage?: StorageService) {
         const bundlePrefix = `agents/${manifestAgent.slug}/`;
         const bundleFiles = Object.fromEntries(
           Object.entries(plan.source.files)
-            .filter(([filePath]) => filePath.startsWith(bundlePrefix))
+            .filter(([filePath]) =>
+              filePath.startsWith(bundlePrefix) &&
+              !filePath.endsWith("/.paperclip.yaml") &&
+              !filePath.endsWith("/.paperclip.yml"),
+            )
             .flatMap(([filePath, content]) => typeof content === "string"
               ? [[normalizePortablePath(filePath.slice(bundlePrefix.length)), content] as const]
               : []),
@@ -3984,6 +4182,10 @@ export function companyPortabilityService(db: Db, storage?: StorageService) {
           permissions: manifestAgent.permissions,
           metadata: manifestAgent.metadata,
         };
+        const shouldGrantTaskAssign = shouldGrantImportedTaskAssignPermission(
+          manifestAgent.role,
+          manifestAgent.permissions,
+        );
 
         if (planAgent.action === "update" && planAgent.existingAgentId) {
           let updated = await agents.update(planAgent.existingAgentId, patch);
@@ -4007,6 +4209,14 @@ export function companyPortabilityService(db: Db, storage?: StorageService) {
           } catch (err) {
             warnings.push(`Failed to materialize instructions bundle for ${manifestAgent.slug}: ${err instanceof Error ? err.message : String(err)}`);
           }
+          await access.setPrincipalPermission(
+            targetCompany.id,
+            "agent",
+            updated.id,
+            "tasks:assign",
+            shouldGrantTaskAssign,
+            actorUserId ?? null,
+          );
           importedSlugToAgentId.set(planAgent.slug, updated.id);
           existingSlugToAgentId.set(normalizeAgentUrlKey(updated.name) ?? updated.id, updated.id);
           resultAgents.push({
@@ -4026,7 +4236,7 @@ export function companyPortabilityService(db: Db, storage?: StorageService) {
           "agent",
           created.id,
           "tasks:assign",
-          true,
+          shouldGrantTaskAssign,
           actorUserId ?? null,
         );
         try {

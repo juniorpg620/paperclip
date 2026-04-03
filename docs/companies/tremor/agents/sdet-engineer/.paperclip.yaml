@@ -1,0 +1,21 @@
+role: qa
+adapter:
+  type: process
+  command: codex
+  args:
+    - exec
+    - --json
+    - "-"
+runtime:
+  heartbeat:
+    enabled: false
+    intervalSec: 300
+    wakeOnAssignment: true
+    wakeOnOnDemand: true
+    wakeOnAutomation: true
+    cooldownSec: 10
+  timeoutSec: 1800
+  graceSec: 15
+permissions:
+  canCreateAgents: false
+  canAssignTasks: false
