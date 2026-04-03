@@ -2741,13 +2741,19 @@ export function heartbeatService(db: Db) {
       const normalizedUsage = sessionUsageResolution.normalizedUsage;
 
       let outcome: "succeeded" | "failed" | "cancelled" | "timed_out";
+      let silentFailureMessage: string | null = null;
       const latestRun = await getRun(run.id);
       if (latestRun?.status === "cancelled") {
         outcome = "cancelled";
       } else if (adapterResult.timedOut) {
         outcome = "timed_out";
       } else if ((adapterResult.exitCode ?? 0) === 0 && !adapterResult.errorMessage) {
-        outcome = "succeeded";
+        if (adapterResult.silentFailure) {
+          outcome = "failed";
+          silentFailureMessage = `Agent exited cleanly but performed no work: ${adapterResult.silentFailure.reason}`;
+        } else {
+          outcome = "succeeded";
+        }
       } else {
         outcome = "failed";
       }
@@ -2798,7 +2804,7 @@ export function heartbeatService(db: Db) {
           outcome === "succeeded"
             ? null
             : redactCurrentUserText(
-                adapterResult.errorMessage ?? (outcome === "timed_out" ? "Timed out" : "Adapter failed"),
+                silentFailureMessage ?? adapterResult.errorMessage ?? (outcome === "timed_out" ? "Timed out" : "Adapter failed"),
                 currentUserRedactionOptions,
               ),
         errorCode:
@@ -2807,7 +2813,7 @@ export function heartbeatService(db: Db) {
             : outcome === "cancelled"
               ? "cancelled"
               : outcome === "failed"
-                ? (adapterResult.errorCode ?? "adapter_failed")
+                ? (silentFailureMessage ? "silent_failure" : (adapterResult.errorCode ?? "adapter_failed"))
                 : null,
         exitCode: adapterResult.exitCode,
         signal: adapterResult.signal,
@@ -2823,7 +2829,7 @@ export function heartbeatService(db: Db) {
 
       await setWakeupStatus(run.wakeupRequestId, outcome === "succeeded" ? "completed" : status, {
         finishedAt: new Date(),
-        error: adapterResult.errorMessage ?? null,
+        error: silentFailureMessage ?? adapterResult.errorMessage ?? null,
       });
 
       const finalizedRun = await getRun(run.id);
