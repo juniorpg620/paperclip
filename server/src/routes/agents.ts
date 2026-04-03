@@ -742,7 +742,11 @@ export function agentRoutes(db: Db) {
     const companyId = req.params.companyId as string;
     assertCompanyAccess(req, companyId);
     const type = req.params.type as string;
-    const models = await listAdapterModels(type);
+    const localBaseUrlRaw = (req.query as Record<string, unknown> | undefined)?.localBaseUrl;
+    const localBaseUrl = typeof localBaseUrlRaw === "string" && localBaseUrlRaw.trim().length > 0
+      ? localBaseUrlRaw.trim()
+      : undefined;
+    const models = await listAdapterModels(type, { localBaseUrl });
     res.json(models);
   });
 
