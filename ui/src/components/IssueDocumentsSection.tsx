@@ -859,25 +859,14 @@ export function IssueDocumentsSection({
               {!isFolded ? (
                 <div
                   className="mt-3 space-y-3"
-                  onFocusCapture={!isHistoricalPreview
-                    ? () => {
-                        if (!activeDraft) {
-                          beginEdit(doc.key);
-                        }
+                  onBlurCapture={activeDraft && !isHistoricalPreview
+                    ? async (event) => {
+                        await handleDraftBlur(event);
                       }
                     : undefined}
-                  onBlurCapture={!isHistoricalPreview
+                  onKeyDown={activeDraft && !isHistoricalPreview
                     ? async (event) => {
-                        if (activeDraft) {
-                          await handleDraftBlur(event);
-                        }
-                      }
-                    : undefined}
-                  onKeyDown={!isHistoricalPreview
-                    ? async (event) => {
-                        if (activeDraft) {
-                          await handleDraftKeyDown(event);
-                        }
+                        await handleDraftKeyDown(event);
                       }
                     : undefined}
                 >
@@ -996,23 +985,16 @@ export function IssueDocumentsSection({
                       <div className="rounded-md border border-amber-500/20 bg-background/50 p-3">
                         {renderBody(displayedBody, documentBodyContentClassName)}
                       </div>
-                    ) : (
+                    ) : activeDraft ? (
                       <MarkdownEditor
-                        value={displayedBody}
+                        value={activeDraft.body}
                         onChange={(body) => {
                           markDocumentDirty(doc.key);
-                          setDraft((current) => {
-                            if (current && current.key === doc.key && !current.isNew) {
-                              return { ...current, body };
-                            }
-                            return {
-                              key: doc.key,
-                              title: doc.title ?? "",
-                              body,
-                              baseRevisionId: doc.latestRevisionId,
-                              isNew: false,
-                            };
-                          });
+                          setDraft((current) =>
+                            current && current.key === doc.key && !current.isNew
+                              ? { ...current, body }
+                              : current,
+                          );
                         }}
                         placeholder="Markdown body"
                         bordered={false}
@@ -1020,8 +1002,12 @@ export function IssueDocumentsSection({
                         contentClassName={documentBodyContentClassName}
                         mentions={mentions}
                         imageUploadHandler={imageUploadHandler}
-                        onSubmit={() => void commitDraft(activeDraft ?? draft, { clearAfterSave: false, trackAutosave: true })}
+                        onSubmit={() => void commitDraft(activeDraft, { clearAfterSave: false, trackAutosave: true })}
                       />
+                    ) : (
+                      <div className="w-full rounded-md p-0 text-left">
+                        {renderBody(displayedBody, documentBodyContentClassName)}
+                      </div>
                     )}
                   </div>
                   <div className="flex min-h-4 items-center justify-end px-1">
