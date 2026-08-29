@@ -21,8 +21,16 @@ function withPlugins(config) {
   };
 }
 
+// The manifest build is unbundled, so its relative imports must also be
+// emitted into dist/ as their own files.
+const constantsConfig = withPlugins({
+  input: "src/constants.ts",
+  output: { dir: "dist", format: "es", sourcemap: true },
+});
+
 export default [
   withPlugins(presets.rollup.manifest),
   withPlugins(presets.rollup.worker),
   withPlugins(presets.rollup.ui),
+  constantsConfig,
 ].filter(Boolean);
