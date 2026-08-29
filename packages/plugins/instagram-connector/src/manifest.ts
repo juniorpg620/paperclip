@@ -20,6 +20,7 @@ const manifest: PaperclipPluginManifestV1 = {
   author: "Paperclip",
   categories: ["connector"],
   capabilities: [
+    "instance.settings.register",
     "jobs.schedule",
     "http.outbound",
     "secrets.read-ref",
