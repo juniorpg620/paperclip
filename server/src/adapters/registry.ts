@@ -68,6 +68,11 @@ import {
   agentConfigurationDoc as piAgentConfigurationDoc,
 } from "@paperclipai/adapter-pi-local";
 import {
+  execute as jarvisExecute,
+  testEnvironment as jarvisTestEnvironment,
+} from "@paperclipai/adapter-jarvis-local/server";
+import { agentConfigurationDoc as jarvisAgentConfigurationDoc } from "@paperclipai/adapter-jarvis-local";
+import {
   execute as hermesExecute,
   testEnvironment as hermesTestEnvironment,
   sessionCodec as hermesSessionCodec,
@@ -175,6 +180,15 @@ const piLocalAdapter: ServerAdapterModule = {
   agentConfigurationDoc: piAgentConfigurationDoc,
 };
 
+const jarvisLocalAdapter: ServerAdapterModule = {
+  type: "jarvis_local",
+  execute: jarvisExecute,
+  testEnvironment: jarvisTestEnvironment,
+  models: [],
+  supportsLocalAgentJwt: true,
+  agentConfigurationDoc: jarvisAgentConfigurationDoc,
+};
+
 const hermesLocalAdapter: ServerAdapterModule = {
   type: "hermes_local",
   execute: hermesExecute,
@@ -197,6 +211,7 @@ const adaptersByType = new Map<string, ServerAdapterModule>(
     cursorLocalAdapter,
     geminiLocalAdapter,
     openclawGatewayAdapter,
+    jarvisLocalAdapter,
     hermesLocalAdapter,
     processAdapter,
     httpAdapter,

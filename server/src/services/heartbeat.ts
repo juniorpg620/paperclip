@@ -77,6 +77,9 @@ const SESSIONED_LOCAL_ADAPTERS = new Set([
   "opencode_local",
   "pi_local",
 ]);
+// jarvis_local is intentionally excluded: OpenJarvis's `ask` CLI has no
+// per-run session/resume flag, so it doesn't participate in Paperclip's
+// session-resume bookkeeping (see packages/adapters/jarvis-local).
 
 export function applyPersistedExecutionWorkspaceConfig(input: {
   config: Record<string, unknown>;
