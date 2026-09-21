@@ -4,6 +4,7 @@ import { codexLocalUIAdapter } from "./codex-local";
 import { cursorLocalUIAdapter } from "./cursor";
 import { geminiLocalUIAdapter } from "./gemini-local";
 import { hermesLocalUIAdapter } from "./hermes-local";
+import { jarvisLocalUIAdapter } from "./jarvis-local";
 import { openCodeLocalUIAdapter } from "./opencode-local";
 import { piLocalUIAdapter } from "./pi-local";
 import { openClawGatewayUIAdapter } from "./openclaw-gateway";
@@ -19,6 +20,7 @@ const uiAdapters: UIAdapterModule[] = [
   piLocalUIAdapter,
   cursorLocalUIAdapter,
   openClawGatewayUIAdapter,
+  jarvisLocalUIAdapter,
   processUIAdapter,
   httpUIAdapter,
 ];

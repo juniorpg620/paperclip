@@ -16,6 +16,7 @@ import {
   Code,
   Gem,
   MousePointer2,
+  Radio,
   Sparkles,
   Terminal,
 } from "lucide-react";
@@ -31,7 +32,8 @@ type AdvancedAdapterType =
   | "pi_local"
   | "cursor"
   | "openclaw_gateway"
-  | "hermes_local";
+  | "hermes_local"
+  | "jarvis_local";
 
 const ADVANCED_ADAPTER_OPTIONS: Array<{
   value: AdvancedAdapterType;
@@ -89,6 +91,12 @@ const ADVANCED_ADAPTER_OPTIONS: Array<{
     label: "OpenClaw Gateway",
     icon: Bot,
     desc: "Invoke OpenClaw via gateway protocol",
+  },
+  {
+    value: "jarvis_local",
+    label: "OpenJarvis",
+    icon: Radio,
+    desc: "Local OpenJarvis agent",
   },
 ];
 

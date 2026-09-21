@@ -54,6 +54,7 @@ import {
   Check,
   Loader2,
   ChevronDown,
+  Radio,
   X
 } from "lucide-react";
 import { HermesIcon } from "./HermesIcon";
@@ -68,7 +69,8 @@ type AdapterType =
   | "pi_local"
   | "cursor"
   | "http"
-  | "openclaw_gateway";
+  | "openclaw_gateway"
+  | "jarvis_local";
 
 const DEFAULT_TASK_DESCRIPTION = `You are the CEO. You set the direction for the company.
 
@@ -213,7 +215,8 @@ export function OnboardingWizard() {
     adapterType === "hermes_local" ||
     adapterType === "opencode_local" ||
     adapterType === "pi_local" ||
-    adapterType === "cursor";
+    adapterType === "cursor" ||
+    adapterType === "jarvis_local";
   const effectiveAdapterCommand =
     command.trim() ||
     (adapterType === "codex_local"
@@ -228,6 +231,8 @@ export function OnboardingWizard() {
       ? "agent"
       : adapterType === "opencode_local"
       ? "opencode"
+      : adapterType === "jarvis_local"
+      ? "jarvis"
       : "claude");
 
   useEffect(() => {
@@ -855,6 +860,12 @@ export function OnboardingWizard() {
                             desc: "Local multi-provider agent"
                           },
                           {
+                            value: "jarvis_local" as const,
+                            label: "OpenJarvis",
+                            icon: Radio,
+                            desc: "Local OpenJarvis agent"
+                          },
+                          {
                             value: "openclaw_gateway" as const,
                             label: "OpenClaw Gateway",
                             icon: Bot,
@@ -1093,6 +1104,8 @@ export function OnboardingWizard() {
                                 ? `${effectiveAdapterCommand} --output-format json "Respond with hello."`
                               : adapterType === "opencode_local"
                                 ? `${effectiveAdapterCommand} run --format json "Respond with hello."`
+                              : adapterType === "jarvis_local"
+                                ? `${effectiveAdapterCommand} doctor --json && ${effectiveAdapterCommand} ask --json --no-stream "Respond with hello."`
                               : `${effectiveAdapterCommand} --print - --output-format stream-json --verbose`}
                           </p>
                           <p className="text-muted-foreground">
