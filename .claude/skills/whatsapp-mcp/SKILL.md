@@ -109,6 +109,16 @@ user the exact recipient + text, and only send after they confirm.
 
 ## Troubleshooting
 
+- `Client outdated (405) connect failure` then `Timeout waiting for QR code scan` →
+  the pinned whatsmeow is too old for WhatsApp's servers. Upgrade it and patch
+  `main.go` for the new API (`context.Context` first arg):
+  ```powershell
+  powershell -ExecutionPolicy Bypass -File .claude\skills\whatsapp-mcp\scripts\fix-client-outdated.ps1
+  ```
+  Manual equivalent: `go get go.mau.fi/whatsmeow@latest; go mod tidy`, then in
+  `main.go` add `context.Background(), ` as the first argument to
+  `client.Download`, `sqlstore.New`, `container.GetFirstDevice`,
+  `client.GetGroupInfo`, and `client.Store.Contacts.GetContact`.
 - `Binary was compiled with 'CGO_ENABLED=0'` → `go env -w CGO_ENABLED=1` and make sure `gcc` is on PATH.
 - `gcc: not found` / `cgo: C compiler not found` → install MSYS2 GCC (step 1) and reopen the terminal.
 - Tools respond but no data → the bridge isn't running; start `go run main.go`.
