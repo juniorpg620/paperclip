@@ -1,0 +1,99 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--ink:#070d18;--navy:#0b1424;--teal:#19d3b0;--teal2:#11998a;--mute:#8aa0a8;--line:rgba(25,211,176,.22)}
+body{width:1080px;height:1350px;background:var(--ink);font-family:"Inter","Helvetica Neue",Arial,sans-serif;color:#fff;position:relative;overflow:hidden}
+.glow{position:absolute;left:540px;top:800px;width:1100px;height:1100px;transform:translate(-50%,-50%);background:radial-gradient(circle,rgba(25,211,176,.16) 0%,rgba(25,211,176,.05) 38%,transparent 62%)}
+.grid{position:absolute;inset:0;background-image:radial-gradient(rgba(255,255,255,.07) 1.5px,transparent 1.5px);background-size:36px 36px;-webkit-mask-image:linear-gradient(180deg,#000 0%,rgba(0,0,0,.4) 100%)}
+
+.top{position:absolute;left:110px;right:110px;top:96px;display:flex;align-items:center;justify-content:space-between}
+.brand{display:flex;align-items:center;gap:18px;font-size:32px;font-weight:700;letter-spacing:-.5px}
+.logo{width:58px;height:58px;border-radius:14px;background:var(--teal);color:var(--ink);display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:800}
+.brand span{color:var(--teal)}
+.live{display:flex;align-items:center;gap:12px;font-size:22px;font-weight:700;letter-spacing:4px;color:var(--teal);border:2px solid var(--line);border-radius:999px;padding:12px 22px}
+.live i{width:12px;height:12px;border-radius:50%;background:var(--teal);box-shadow:0 0 0 6px rgba(25,211,176,.18),0 0 18px var(--teal)}
+
+.head{position:absolute;left:110px;right:110px;top:208px}
+.kicker{font-size:24px;letter-spacing:6px;font-weight:700;color:var(--mute)}
+h1{margin-top:22px;font-size:84px;line-height:1.02;font-weight:900;letter-spacing:-3px}
+h1 em{font-style:normal;color:var(--teal)}
+
+.radar{position:absolute;left:0;top:0;width:1080px;height:1350px}
+.sweep{position:absolute;left:540px;top:800px;width:520px;height:520px;margin:-260px 0 0 -260px;border-radius:50%;
+  background:conic-gradient(from -42deg,rgba(25,211,176,0) 0deg,rgba(25,211,176,.04) 30deg,rgba(25,211,176,.34) 62deg,rgba(25,211,176,0) 62.2deg)}
+
+.blip{position:absolute;display:flex;align-items:center;gap:14px;transform:translateY(-50%)}
+.blip.l{flex-direction:row-reverse;transform:translate(-100%,-50%)}
+.dot{width:16px;height:16px;border-radius:50%;background:var(--teal);box-shadow:0 0 16px 2px rgba(25,211,176,.7);flex:none;margin-left:-8px}
+.blip.l .dot{margin-left:0;margin-right:-8px}
+.tag{background:rgba(11,20,36,.86);border:1.5px solid rgba(255,255,255,.14);border-radius:12px;padding:9px 16px;font-size:24px;font-weight:600;color:#dfe8ea;white-space:nowrap}
+.blip.dim .dot{background:#6fbfb0;box-shadow:0 0 10px rgba(25,211,176,.4)}
+.blip.dim .tag{color:#a9b8bc}
+.blip.hit .dot{width:22px;height:22px;margin-left:-11px;background:#fff;box-shadow:0 0 0 10px rgba(25,211,176,.28),0 0 0 22px rgba(25,211,176,.12),0 0 30px 6px var(--teal)}
+.blip.hit .tag{background:var(--teal);border-color:var(--teal);color:var(--ink);font-weight:800;font-size:26px;margin-left:16px}
+
+.steps{position:absolute;left:110px;right:110px;top:1112px;display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+.step{background:var(--navy);border:1.5px solid rgba(255,255,255,.08);border-radius:18px;padding:18px 20px;height:112px;display:flex;flex-direction:column;justify-content:space-between}
+.step b{font-size:20px;font-weight:800;letter-spacing:3px;color:var(--teal)}
+.step span{font-size:25px;font-weight:700;line-height:1.1}
+
+.foot{position:absolute;left:110px;right:110px;top:1262px;display:flex;justify-content:space-between;align-items:center;font-size:27px;font-weight:600;color:var(--mute);white-space:nowrap}
+.foot strong{color:var(--ink);background:var(--teal);padding:4px 12px;border-radius:8px;margin:0 4px}
+.foot .h{color:#fff}
+</style></head><body>
+<div class="glow"></div><div class="grid"></div>
+
+<svg class="radar" viewBox="0 0 1080 1350" xmlns="http://www.w3.org/2000/svg">
+  <g fill="none" stroke="rgba(25,211,176,.22)" stroke-width="1.5">
+    <circle cx="540" cy="800" r="260" stroke="rgba(25,211,176,.45)" stroke-width="2"/>
+    <circle cx="540" cy="800" r="195"/>
+    <circle cx="540" cy="800" r="130"/>
+    <circle cx="540" cy="800" r="65"/>
+    <line x1="270" y1="800" x2="810" y2="800"/>
+    <line x1="540" y1="530" x2="540" y2="1070"/>
+    <line x1="356" y1="616" x2="724" y2="984" stroke-dasharray="4 8"/>
+    <line x1="724" y1="616" x2="356" y2="984" stroke-dasharray="4 8"/>
+  </g>
+  <g stroke="rgba(25,211,176,.5)" stroke-width="2">
+    <!-- tick marks around the outer ring -->
+    <line x1="540" y1="532" x2="540" y2="548"/><line x1="808" y1="800" x2="792" y2="800"/>
+    <line x1="540" y1="1068" x2="540" y2="1052"/><line x1="272" y1="800" x2="288" y2="800"/>
+  </g>
+  <!-- sweep line, pointing at the highlighted blip -->
+  <line x1="540" y1="800" x2="629" y2="556" stroke="#19d3b0" stroke-width="3" stroke-linecap="round"/>
+  <circle cx="540" cy="800" r="7" fill="#19d3b0"/>
+  <g font-family="Inter,Arial,sans-serif" font-size="16" font-weight="700" fill="rgba(138,160,168,.8)" letter-spacing="2">
+    <text x="540" y="520" text-anchor="middle">N</text>
+    <text x="826" y="806">L</text>
+    <text x="540" y="1094" text-anchor="middle">S</text>
+    <text x="244" y="806" text-anchor="end">O</text>
+  </g>
+</svg>
+<div class="sweep"></div>
+
+<!-- detected segments (x,y = dot position on the radar) -->
+<div class="blip hit" style="left:618px;top:586px"><i class="dot"></i><span class="tag">+ o seu nicho</span></div>
+<div class="blip l"   style="left:398px;top:676px"><i class="dot"></i><span class="tag">Restaurantes</span></div>
+<div class="blip"     style="left:640px;top:712px"><i class="dot"></i><span class="tag">Clínicas</span></div>
+<div class="blip dim" style="left:734px;top:872px"><i class="dot"></i><span class="tag">Construtoras</span></div>
+<div class="blip l dim" style="left:430px;top:868px"><i class="dot"></i><span class="tag">Oficinas</span></div>
+<div class="blip"     style="left:582px;top:990px"><i class="dot"></i><span class="tag">Indústrias</span></div>
+
+<div class="top">
+  <div class="brand"><div class="logo">&lt;/&gt;</div>RcTECH <span>Digital</span></div>
+  <div class="live"><i></i>RADAR ATIVO</div>
+</div>
+
+<div class="head">
+  <div class="kicker">RADAR DE LEADS · PROSPECÇÃO B2B</div>
+  <h1>Cliente em <em>qualquer<br>segmento.</em> No mapa.</h1>
+</div>
+
+<div class="steps">
+  <div class="step"><b>01</b><span>Segmento</span></div>
+  <div class="step"><b>02</b><span>Região</span></div>
+  <div class="step"><b>03</b><span>Porte</span></div>
+  <div class="step"><b>04</b><span>Potencial de compra</span></div>
+</div>
+
+<div class="foot"><span>Comente<strong>RADAR</strong>e veja seu nicho no mapa</span><span class="h">@rctech_ia</span></div>
+</body></html>
