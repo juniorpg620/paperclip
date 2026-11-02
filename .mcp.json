@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "analytics-mcp": {
+      "command": "uvx",
+      "args": ["analytics-mcp"]
+    }
+  }
+}
