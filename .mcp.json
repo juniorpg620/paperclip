@@ -1,8 +1,8 @@
 {
   "mcpServers": {
     "analytics-mcp": {
-      "command": "uvx",
-      "args": ["analytics-mcp"]
+      "command": "bash",
+      "args": ["scripts/analytics-mcp.sh"]
     }
   }
 }
