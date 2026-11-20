@@ -1,0 +1,12 @@
+{
+  "version": 2,
+  "skills": {
+    "finding-google-skills": {
+      "source": "google/skills",
+      "commit": "bf80eb9187dc3479b27e6a14ec02eaa098045e12",
+      "sourceType": "github",
+      "skillPath": "skills/developers/finding-google-skills/SKILL.md",
+      "computedHash": "e0a5b85fcbe5626a71b07c853e215c109eab2fbe75e2edcefd6e921e62184752"
+    }
+  }
+}
